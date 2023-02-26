@@ -4,14 +4,13 @@ import random
 import requests
 import json
 from call_main import call_api
-from db_main_buy import update_inform_db, delete_string_where
-from db_order_buy import update_inform_db_order
+from db_order_buy import update_inform_db_order, delete_string_where_order, get_bd_infopair_order
 from bs4 import BeautifulSoup as bs
+
 
 """
 не открывать пока не настроишь купленный прокси
-Это для бесплатных прокси, не работает!!! просто как напоминание 
-Удалить что бы не мешал!
+Это для бесплатных прокси не работает просто как напоминание
 
 def get_free_proxies():
     url = "https://free-proxy-list.net/"
@@ -105,7 +104,6 @@ class Application(tk.Frame):
 									fg='red',
 									command=self.delete_focus).place(x=610, y=440)
 
-
 		#  Создание таблицы снизу, для купленных либо выставленных пар 
 		columns = ('buy_sel', 'amount', 'type', 'ID order')
 		self.tree1 = ttk.Treeview(self.window, columns=columns, height=20)
@@ -120,10 +118,10 @@ class Application(tk.Frame):
 		self.tree1.heading("amount", text="Количетво монет", anchor=tk.W)
 		self.tree1.heading("type", text='Тип ордера', anchor=tk.W)
 		self.tree1.heading("ID order", text='ID order', anchor=tk.W)
+
 		self.ysb = ttk.Scrollbar(self.window, orient=VERTICAL, command=self.tree1.yview)
 		self.tree1.configure(yscroll=self.ysb.set)
 		self.ysb.place(x=980, y=480, height=220)
-
 
 		#  Создание таблицы справа, для онлайн пар
 		columns = ('Buy', 'Sell', 'Persent')
@@ -148,20 +146,26 @@ class Application(tk.Frame):
 		self.treeview1 = self.tree1
 		self.id = 0
 
-	def avto_add_taible_in_bd(self):
-		"""Функция которая при включении бота, из БД добавляет в таблицу снизу все валютные пары которые куплены
-		и проверяет есть ли они на балансе """
-		pass
 
-	def insert_data_online(self): #  Добовляет в таблицу случайную валютную пару, 
+	def avto_add_taible_in_bd(self):
+		for i in get_bd_infopair_order():
+			pair = i[0]
+			price = i[1]
+			amount = i[2]
+			type_order = i[3]
+			id_order = i[4]
+			self.treeview1.insert('', 'end', iid = self.id, text = pair, values = (price, amount, type_order, id_order))
+			self.id = self.id + 1
+
+
+
+	def insert_data_online(self): #  Добовляет в таблицу случайную валютную пару, кнопка тдобавить
 		with open('pair.txt', 'r') as file:
 			pairs = file.readlines()
 		i = random.choice(pairs)
 		pair = i.replace('\n', '')
 		pair = pair.replace(' ', '')
 		res = requests.get("https://yobit.io/api/3/depth/"+pair+'?limit=150')
-		print(res)
-		print(pair)
 		list_price = json.loads(res.text)
 		asks = list_price[pair]['asks'][0][0]
 		bids = list_price[pair]['bids'][0][0]
@@ -176,22 +180,31 @@ class Application(tk.Frame):
 			list_price = json.loads(res.text)
 			asks = list_price[self.entry_pair.get()]['asks'][0][0]
 			amount_coin = float(self.entry_coin.get()) / asks
-			list_bye = call_api(method="Trade", pair=self.entry_pair.get(), type="buy", rate=asks, amount=amount_coin)
-			print(list_bye)
+			list_bye = call_api(method="Trade", 
+								pair=self.entry_pair.get(), 
+								type="buy", 
+								rate=asks, 
+								amount=amount_coin)
 			order_id = list_bye['return']['order_id']
-			update_inform_db(self.entry_pair.get(), asks, amount_coin, 'buy', order_id)
+			update_inform_db_order(self.entry_pair.get(), asks, amount_coin, 'buy', order_id)
 			self.treeview1.insert('', 'end', iid = self.id, text = self.entry_pair.get(), values = (asks, amount_coin, 'buy', order_id))
 			self.id = self.id + 1
 		else:
 			print(res.status_code)
+
 
 	def pair_sell(self):   #  Продает выбраную валютную пару, и выбраное колличество монет по цене рынка. Так же удаляет из таблицы снизу запись и из БД
 		res = requests.get('https://yobit.io/api/3/depth/' + self.entry_pair.get() + '?limit=150')
 		if res.status_code == 200:
 			list_price = json.loads(res.text)
 			bids = list_price[self.entry_pair.get()]['bids'][0][0]		
-			call_api(method="Trade", pair=self.entry_pair.get(), type="sell", rate=bids, amount=self.entry_coin.get())
-			delete_string_where(self.entry_pair.get())
+			call_api(method="Trade", 
+					pair=self.entry_pair.get(), 
+					type="sell", 
+					rate=bids, 
+					amount=self.entry_coin.get())
+			delete_string_where_order(self.entry_pair.get())
+			
 			
 	def order_buy_yobit(self):
 		"""Берет валютную пару из Ентри, выставляет ордер по цене продажи можно -1 сатош, 
@@ -201,7 +214,11 @@ class Application(tk.Frame):
 			list_price = json.loads(res.text)
 			bids = list_price[self.entry_pair.get()]['bids'][0][0]
 			amount_coin = float(self.entry_coin.get()) / bids
-			list_bye = call_api(method="Trade", pair=self.entry_pair.get(), type="buy", rate=bids+0.00000001, amount=amount_coin)
+			list_bye = call_api(method="Trade", 
+								pair=self.entry_pair.get(), 
+								type="buy", 
+								rate=bids+0.00000001, 
+								amount=amount_coin)
 			order_id = list_bye['return']['order_id']
 			update_inform_db_order(self.entry_pair.get(), bids, amount_coin, 'order_buy', order_id)
 			self.treeview1.insert('', 'end', iid = self.id, text = self.entry_pair.get(), values = (bids, amount_coin, 'order_buy', order_id))
@@ -209,7 +226,8 @@ class Application(tk.Frame):
 		else:
 			print(res.status_code)
 
-	def order_sell_yobit():
+
+	def order_sell_yobit(self):
 		"""Берет валютную пару из Ентри, если только есть в кпленных парах , выставляет ордер по цене покупки  можно +1 сатош, 
 		добавляет в таблицу снизу и в БД """
 		res = requests.get('https://yobit.io/api/3/depth/' + self.entry_pair.get() + '?limit=150')
@@ -226,7 +244,8 @@ class Application(tk.Frame):
 			self.treeview1.insert('', 'end', iid = self.id, text = self.entry_pair.get(), values = (asks, self.entry_coin.get(), 'order_sell', order_id))
 			self.id = self.id + 1
 
-	def order_pass():
+
+	def order_pass(self):
 		"""Нужно добавить автоматическое удаление из таблицы снизу после отмены ордера"""
 		list_bye = call_api(method="CancelOrder",
 							order_id=self.entry_coin.get())
@@ -240,9 +259,7 @@ class Application(tk.Frame):
 		self.treeview1.delete(row_id)
 
 
-
 app = Application(tk.Tk())
-
 app.window.mainloop()
 
 
