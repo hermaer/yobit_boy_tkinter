@@ -38,4 +38,13 @@ def delete_string_where(pair): #  Удаляет строку переданно
 			cur = con.cursor()
 
 			delet_pair = ("""DELETE from test_base where name = ?1""")
-			cur.execute(delet_pair, (pair, ))
+			try:
+				cur.execute(delet_pair, (pair, ))
+			except:
+				print(ValueError)
+
+def get_bd_infopair():
+    with sq.connect('base_01.db', timeout=7) as con:
+        cur = con.cursor()
+        list_info_table = cur.execute('SELECT * FROM test_base')
+        return list_info_table
